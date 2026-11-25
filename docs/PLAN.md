@@ -18,7 +18,7 @@ The `/pool` route contains the lobby, backend health check and party screen. The
 | Limits | Four participants, fifty queued tracks, six-hour room TTL and admission/message limits |
 | Membership | Connect, leave, reconnect grace, stale reservation cleanup and host transfer |
 | Queue | Everyone adds tracks; host selects, removes or advances them |
-| Playback | Server state and timestamps, client clock estimate and periodic drift correction |
+| Playback | Server state/timestamps and clock estimate; check each second and correct drift over 0.5 seconds after buffering |
 | Voice | WebRTC mesh using processed microphone tracks; per-participant local volume |
 | Microphone | Explicit permission, connect muted, select input, mute/disconnect, monitoring and effects |
 | Host controls | Play/pause/seek/next, mode, singer selection, lock/unlock, mute/remove, end |

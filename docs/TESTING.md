@@ -53,6 +53,7 @@ Real microphone quality, effect latency, device switching and YouTube autoplay/e
 - Use two separate networks, including a restrictive network. Test TURN relay credentials and inspect WebRTC statistics.
 - Compare actual microphone latency and YouTube drift across physical devices. Test buffering, embedded-video restrictions and browser autoplay blocks.
 - Check that Pool sends only microphone audio to peers. Neither mode records audio; YouTube music stays in each participant's embedded player.
+- During Pool playback, introduce a seek mismatch on a guest and confirm the one-second check corrects drift over 0.5 seconds. Check both ahead and behind, shared pause, return from a background tab, recovery after buffering, and natural completion without repeated restarts. Browser background timer throttling can delay periodic checks while a tab is hidden.
 
 ## Phase-two verification — 26 November 2026
 
@@ -71,3 +72,12 @@ Real microphone quality, effect latency, device switching and YouTube autoplay/e
 - Production build with `VERCEL=1` passed with `/` and `/pool`, including TypeScript validation.
 - Local/Docker configuration still selects standalone output; Vercel selects its native Next.js output.
 - Docker Compose configuration validates after the rename. No Vercel deployment was created as part of this preparation.
+
+## UI refresh acceptance checks
+
+- At desktop, tablet, and 320px/375px mobile widths, check page overflow, player controls, setlist tabs, dialogs, and the mobile Studio / Songs / Sound navigation.
+- Use the heading and empty-player song buttons. Submit an invalid link, correct it, add songs, switch lists with arrow keys, and remove the current song. Confirm the video clears.
+- Connect, mute, and disconnect the microphone. Check permission feedback, input level, monitoring guidance, and the expandable vocal effects.
+- In Pool, switch Create / Join, follow an invitation, copy/show/hide the room link, and check connection/microphone status. Confirm the native confirmation dialog supports Escape and keyboard focus.
+- Stop the backend and confirm the Pool unavailable state links back to working Solo karaoke.
+- Automated verification: 16 frontend tests and the Vercel production build (including TypeScript) passed. No connected browser was available for visual or real-media verification.

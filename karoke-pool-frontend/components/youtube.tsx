@@ -4,11 +4,12 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { Music2 } from "lucide-react";
 import type { Song } from "@/lib/types";
+import { correctPlayback, PLAYBACK_SYNC_INTERVAL_MS, type PlaybackSync, type SyncPlayer } from "@/lib/playback-sync";
 
 // Fixed integer heights keep server and browser style serialization identical.
 const SOUND_BAR_HEIGHTS = [12, 45, 19, 33, 34, 18, 46, 12, 45, 20, 32, 35, 17, 46, 12, 44, 21, 31, 36, 16, 46, 12, 43, 22, 30, 37, 15];
 
-type Player = { loadVideoById: (v: string) => void; cueVideoById: (v: string) => void; playVideo: () => void; pauseVideo: () => void; seekTo: (n: number, allow: boolean) => void; getCurrentTime: () => number; getDuration: () => number; setVolume: (n: number) => void; destroy: () => void };
+type Player = SyncPlayer & { loadVideoById: (v: string) => void; cueVideoById: (v: string) => void; setVolume: (n: number) => void; destroy: () => void };
 declare global { interface Window { YT?: { Player: new (el: HTMLElement, opts: object) => Player }; onYouTubeIframeAPIReady?: () => void } }
 let loader: Promise<void> | null = null;
 function load() {
@@ -23,8 +24,7 @@ function load() {
   return loader;
 }
 export type PlayerHandle = { play: () => void; pause: () => void; seek: (position: number) => void; fullscreen: () => void };
-type PlaybackSync = { playing: boolean; position: number; updatedAt: number; clockOffset: number };
-type Props = { song: Song | null; autoPlay: boolean; volume: number; sync?: PlaybackSync; onPlayback: (playing: boolean) => void; onProgress: (position: number, duration: number) => void; onEnd: () => void; onError: (s: string) => void };
+type Props = { song: Song | null; autoPlay: boolean; volume: number; sync?: PlaybackSync; onChooseSong?: () => void; onPlayback: (playing: boolean) => void; onProgress: (position: number, duration: number) => void; onEnd: () => void; onError: (s: string) => void };
 export const YouTube = forwardRef<PlayerHandle, Props>(function YouTube(props, ref) {
   const mount = useRef<HTMLDivElement>(null);
   const container = useRef<HTMLDivElement>(null);
@@ -32,14 +32,11 @@ export const YouTube = forwardRef<PlayerHandle, Props>(function YouTube(props, r
   const latest = useRef(props); latest.current = props;
   const [ready, setReady] = useState(false);
   const hasSong = Boolean(props.song);
+  const syncEnabled = Boolean(props.sync);
   const syncPlayback = () => {
     const p = player.current, sync = latest.current.sync;
     if (!p || !sync || !latest.current.song) return;
-    const target = sync.position + (sync.playing ? Math.max(0, (Date.now() + sync.clockOffset) / 1000 - sync.updatedAt) : 0);
-    const duration = p.getDuration() || 0;
-    // Avoid seeking to the duration and repeatedly triggering the ended event.
-    if ((!duration || target < duration - 0.5) && Math.abs((p.getCurrentTime() || 0) - target) > 1.5) p.seekTo(target, true);
-    if (sync.playing) p.playVideo(); else p.pauseVideo();
+    correctPlayback(p, sync);
   };
   useImperativeHandle(ref, () => ({
     play: () => { if (player.current && ready) player.current.playVideo(); else latest.current.onError("The player is still loading. Try again in a moment."); },
@@ -86,9 +83,15 @@ export const YouTube = forwardRef<PlayerHandle, Props>(function YouTube(props, r
   useEffect(() => {
     if (!ready || !hasSong || !props.sync) return;
     syncPlayback();
-    const timer = setInterval(syncPlayback, 5000);
-    return () => clearInterval(timer);
   }, [ready, hasSong, props.sync?.playing, props.sync?.position, props.sync?.updatedAt, props.sync?.clockOffset]);
+  useEffect(() => {
+    if (!ready || !hasSong || !syncEnabled) return;
+    // Keep the cadence stable when new room snapshots or clock estimates arrive.
+    const timer = setInterval(syncPlayback, PLAYBACK_SYNC_INTERVAL_MS);
+    const onVisible = () => { if (!document.hidden) syncPlayback(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => { clearInterval(timer); document.removeEventListener("visibilitychange", onVisible); };
+  }, [ready, hasSong, syncEnabled]);
   useEffect(() => {
     if (!ready || !hasSong) return;
     const timer = setInterval(() => {
@@ -100,6 +103,6 @@ export const YouTube = forwardRef<PlayerHandle, Props>(function YouTube(props, r
   useEffect(() => { if (ready) player.current?.setVolume(props.volume); }, [props.volume, ready]);
   return <div className="video-stage" ref={container}>
     <div ref={mount} className={props.song ? "youtube-mount" : "youtube-mount hidden-player"} />
-    {!props.song && <div className="stage-empty"><div className="stage-orbit"><Music2 size={42} strokeWidth={1.4} /></div><span className="eyebrow">THE STAGE IS YOURS</span><h2>Every great night<br/>starts with a song.</h2><p>Find your favorite karaoke track<br/>or paste a YouTube link to begin.</p><div className="sound-bars" aria-hidden="true">{SOUND_BAR_HEIGHTS.map((height, i) => <i key={i} style={{ height: `${height}px` }} />)}</div></div>}
+    {!props.song && <div className="stage-empty"><div className="stage-orbit"><Music2 size={42} strokeWidth={1.4} /></div><span className="eyebrow">THE STAGE IS YOURS</span><h2>Find your song.<br/>Make it your own.</h2><p>Bring a karaoke video from YouTube.<br/>We’ll take care of your sound.</p>{props.onChooseSong && <button className="stage-choose" onClick={props.onChooseSong}><Music2 size={17}/>Choose a song</button>}<div className="sound-bars" aria-hidden="true">{SOUND_BAR_HEIGHTS.map((height, i) => <i key={i} style={{ height: `${height}px` }} />)}</div></div>}
   </div>;
 });

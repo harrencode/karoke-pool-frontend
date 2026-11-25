@@ -33,7 +33,7 @@ Follow `backend/README.md` to install and run the independent FastAPI service on
 
 The host controls the shared player, queued song selection/removal, singing mode, selected singers, room lock, participant mute/removal and ending the party. Modes are solo, duet, group and turn-based. Everyone can add songs and adjust local music and participant volumes.
 
-Use the shared playback controls to synchronize the room. Native YouTube controls affect only your own player; synchronization periodically corrects drift. Use **Enable room audio** if the browser blocks autoplay. Wired headphones work best. Real networks cannot guarantee perfectly synchronized singing; advertisements and buffering also affect YouTube alignment.
+Use the shared playback controls to synchronize the room. Native YouTube controls affect only your own player. Each browser checks alignment every second and corrects drift greater than 0.5 seconds, with an immediate check when returning to the tab. Correction waits while YouTube buffers, then catches up when playback resumes. These local checks do not add backend requests. Use **Enable room audio** if the browser blocks autoplay. Wired headphones work best. Real networks cannot guarantee perfectly synchronized singing; advertisements and buffering also affect YouTube alignment.
 
 ## Docker
 
