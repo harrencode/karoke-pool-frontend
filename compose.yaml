@@ -1,0 +1,19 @@
+services:
+  frontend:
+    build:
+      context: ./karoke-pool-frontend
+      args:
+        NEXT_PUBLIC_POOL_API_URL: ${NEXT_PUBLIC_POOL_API_URL:-http://localhost:8000}
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+  backend:
+    profiles: [pool]
+    build: ./backend
+    ports:
+      - "8000:8000"
+    environment:
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
+      TURN_URLS: ${TURN_URLS:-}
+      TURN_SECRET: ${TURN_SECRET:-}
+    restart: unless-stopped
