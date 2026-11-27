@@ -470,3 +470,6 @@ footer>span:last-child{margin-left:0;width:100%}
 .icon-btn,.add-song-button{min-height:44px}
 .pool-entry input,.pool-song-form input,.pool-microphone select,.pool-host select,.invite-link input,.text-input input,.select-wrap select{font-size:16px}
 }
+.latency-values{margin:0;font-size:13px;color:var(--muted)}.latency-values>div{display:flex;justify-content:space-between;gap:12px;padding:5px 0}.latency-values dd{margin:0;font-variant-numeric:tabular-nums;color:var(--ink)}
+.audience-panel{margin-top:28px;padding:25px;max-width:900px}.audience-panel>.panel-heading{gap:16px;flex-wrap:wrap}.audience-panel h2{font-size:18px;font-weight:600}.audience-panel>p{font-size:14px;line-height:1.8;color:var(--muted);margin-top:15px}.audience-panel .field-label{margin-top:22px}.audience-panel ol{padding-left:22px;color:var(--muted);font-size:14px;line-height:1.8;margin:20px 0}.audience-panel .pool-actions{margin-top:20px}.audience-panel>.form-error{color:#b3422d}@media(max-width:650px){.audience-panel{padding:22px}.audience-panel .pool-actions>*{width:100%}}
+.audience-output{max-width:780px;padding:36px 24px}.audience-output .audience-panel{margin-top:25px}.audience-output select{display:block;width:100%;padding:13px;border:1px solid var(--line);border-radius:8px;background:white;color:var(--ink);font:inherit}.audience-output .field-label{margin-top:20px}

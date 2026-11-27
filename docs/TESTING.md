@@ -81,3 +81,30 @@ Real microphone quality, effect latency, device switching and YouTube autoplay/e
 - In Pool, switch Create / Join, follow an invitation, copy/show/hide the room link, and check connection/microphone status. Confirm the native confirmation dialog supports Escape and keyboard focus.
 - Stop the backend and confirm the Pool unavailable state links back to working Solo karaoke.
 - Automated verification: 16 frontend tests and the Vercel production build (including TypeScript) passed. No connected browser was available for visual or real-media verification.
+
+## Microphone monitoring latency
+
+- Solo and Pool request minimum input latency and mono capture as preferences. Headphone monitoring disables echo cancellation and noise suppression; switching monitoring off restores both. Automatic gain control stays off.
+- The AudioContext requests minimum output latency. Browsers and devices can ignore latency preferences; this does not guarantee a measured delay.
+- With wired headphones and Echo/Reverb at zero, compare monitoring on/off, reconnect with monitoring already enabled, switch input devices, and quickly toggle monitoring. Verify mute/disconnect still silences output and Pool still sends the microphone only to allowed singers.
+- Repeat with unsupported constraints and real Bluetooth/TV output. Hardware, browser buffering and network latency cannot be removed by these settings. Echo is intentionally a delayed effect; reverb adds a tail.
+- Automated capture-policy tests cover headphone mode and restoring speaker echo protection. Physical audio latency remains unmeasured in this environment.
+- Connect a microphone and open Microphone delay in Solo and Pool. Check that input, processing and output values refresh, and missing values say Not reported. A combined estimate appears only when all stages report valid values. It includes the dry-path compressor look-ahead; it is not a physical loopback measurement, a song-sync measurement, or a measurement of remote Pool voice.
+- Compare wired and Bluetooth output on real devices. Bluetooth buffering may be absent from browser estimates. No microphone is recorded, and this readout plays no test sounds.
+
+## Fast headphone monitoring
+
+- Fast monitoring defaults on in Solo and Pool; Hear myself still requires an explicit opt-in. The local voice path bypasses vocal effects and compressor look-ahead, using a non-oversampled clamp for boosted input. Pool's processed outgoing stream still contains the selected effects.
+- With headphones, toggle Fast monitoring with Hear myself on. Fast mode should provide one dry voice; normal mode should restore echo/reverb. Check mic volume, mute/disconnect, device switching, and Pool host mute/listening restrictions in both modes.
+- Reconnect with fast mode disabled and confirm that choice applies immediately. Verify the delay readout excludes compressor look-ahead in fast mode and includes it in normal mode.
+- Route regression tests and latency estimate tests pass. Real-device audible improvement and Bluetooth latency remain unmeasured; this change cannot remove Bluetooth/hardware buffering.
+
+## Live compensated audience output
+
+- On a desktop Chrome/Edge setup, use Bluetooth headphones as default output and separate USB/wired speakers for the audience. Connect and unmute the mic, choose a song, share the Solo tab with audio, open audience output, choose speakers, and enable sound. The singer should hear only the original music; the speakers should play delayed music plus mic.
+- Adjust song delay live at 0, 150, 500 and 2,000 ms. Confirm only the audience music changes timing, not microphone audio, singer music, lyrics, or Pool sync. Increase delay for a late voice and decrease for an early voice. Alignment is manually calibrated, not automatically measured.
+- Confirm monitoring is turned off and disabled while sharing, and neither mix route feeds back into the captured studio tab. Default output and headphone aliases must be excluded when device grouping is reported.
+- Test sharing cancellation, sharing without audio, selecting a full screen/window, selecting the audience tab, denied speaker permission, popup blocking, and unsupported browsers. Confirm understandable errors and normal Solo use afterward. Capture-handle validation rejects the wrong tab on supporting browsers.
+- Stop browser sharing, unplug the mic, switch mic devices, remove the current song, close the audience window, refresh, and leave Solo. Confirm capture indicators and mixed output stop. Disconnect an audience device; sound should pause and require a fresh output selection.
+- Confirm a mic mute silences only the voice while the song continues. Check echo/reverb and mic gain in the audience stream. No MediaRecorder, recording download, or upload is used.
+- Automated tests cover music-only delay routing, bounds/live delay changes, graph cleanup without stopping the studio microphone, and audience device filtering. No connected browser was available for physical tab-sharing, popup, sink-selection, or live-audio verification.

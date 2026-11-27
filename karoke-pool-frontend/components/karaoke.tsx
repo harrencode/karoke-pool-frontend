@@ -4,8 +4,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { AudioLines, Check, ChevronDown, CircleHelp, Clock3, ExternalLink, Headphones, History, Link2, ListMusic, LoaderCircle, Maximize, Mic, MicOff, Music2, Pause, Play, Plus, Radio, RotateCcw, Search, ShieldCheck, SkipForward, SlidersHorizontal, Sparkles, Trash2, Users, Volume2, X } from "lucide-react";
 import { Microphone } from "@/lib/audio";
+import { microphoneConstraints } from "@/lib/microphone-constraints";
 import { Song, timeLabel, validSong, videoId } from "@/lib/types";
 import { PlayerHandle, YouTube } from "./youtube";
+import { MicrophoneDelay } from "./microphone-delay";
+import { LiveAudience } from "./live-audience";
 
 const STORAGE = "encore.solo.v1";
 type Settings = { music: number; mic: number; echo: number; reverb: number };
@@ -39,6 +42,8 @@ export default function Karaoke() {
   const [busy, setBusy] = useState(false);
   const [muted, setMuted] = useState(false);
   const [monitor, setMonitor] = useState(false);
+  const [fastMonitor, setFastMonitor] = useState(true);
+  const [audienceCapture, setAudienceCapture] = useState(false);
   const [level, setLevel] = useState(0);
   const mic = useRef<Microphone | null>(null);
   const player = useRef<PlayerHandle>(null);
@@ -97,10 +102,7 @@ export default function Karaoke() {
     let input: MediaStream | null = null;
     let graph: Microphone | null = null;
     try {
-      input = await navigator.mediaDevices.getUserMedia({ audio: {
-        deviceId: selected ? { exact: selected } : undefined,
-        echoCancellation: true, noiseSuppression: true, autoGainControl: false
-      }});
+      input = await navigator.mediaDevices.getUserMedia({ audio: microphoneConstraints(selected, monitor) });
       if (!mounted.current || id !== requestId.current) { input.getTracks().forEach(t => t.stop()); return; }
       graph = new Microphone(input);
       await graph.context.resume();
@@ -109,6 +111,7 @@ export default function Karaoke() {
       graph.echo.gain.value = settings.echo / 100 * 0.65;
       graph.reverb.gain.value = settings.reverb / 100 * 0.7;
       graph.monitor.gain.value = monitor ? 1 : 0;
+      graph.setFastMonitoring(fastMonitor);
       mic.current?.close();
       mic.current = graph;
       setConnected(true); setMuted(false);
@@ -131,13 +134,21 @@ export default function Karaoke() {
     setConnected(false); setMuted(false); setBusy(false); setLevel(0);
   }
   useEffect(() => {
+    const graph = mic.current;
+    if (!graph) return;
+    void graph.configureMonitoring(monitor).catch(() => {
+      if (mic.current === graph) setNotice("This microphone could not change its processing settings. Reconnect it to try again.");
+    });
+  }, [monitor, connected]);
+  useEffect(() => {
     const graph = mic.current; if (!graph) return;
     graph.gain.gain.setTargetAtTime(settings.mic / 100, graph.context.currentTime, 0.02);
     graph.echo.gain.setTargetAtTime(settings.echo / 100 * 0.65, graph.context.currentTime, 0.02);
     graph.reverb.gain.setTargetAtTime(settings.reverb / 100 * 0.7, graph.context.currentTime, 0.02);
     graph.monitor.gain.setTargetAtTime(monitor && !muted ? 1 : 0, graph.context.currentTime, 0.02);
     graph.mute(muted);
-  }, [settings, monitor, muted, connected]);
+    graph.setFastMonitoring(fastMonitor);
+  }, [settings, monitor, muted, connected, fastMonitor]);
   useEffect(() => {
     if (!connected) return;
     const timer = setInterval(() => {
@@ -206,8 +217,8 @@ export default function Karaoke() {
         </div>
         <div className="session-overview" aria-label="Studio status">
           <div><Music2 size={18}/><span>Song<strong>{current ? "Ready to play" : "Choose your first track"}</strong></span></div>
-          <button onClick={() => goTo("sound-controls")}><Mic size={18}/><span>Microphone<strong>{busy ? "Connecting?" : connected ? muted ? "Muted" : "Connected" : "Not connected"}</strong></span></button>
-          <div><Headphones size={18}/><span>Voice monitoring<strong>{monitor && connected && !muted ? "On ? use headphones" : "Off"}</strong></span></div>
+          <button onClick={() => goTo("sound-controls")}><Mic size={18}/><span>Microphone<strong>{busy ? "Connecting..." : connected ? muted ? "Muted" : "Connected" : "Not connected"}</strong></span></button>
+          <div><Headphones size={18}/><span>Voice monitoring<strong>{monitor && connected && !muted ? "On - use headphones" : "Off"}</strong></span></div>
         </div>
         {error && <div role="alert" className="alert"><CircleHelp size={18}/><span>{error}</span><button className="icon-btn" aria-label="Dismiss error" onClick={() => setError("")}><X size={17}/></button></div>}
 
@@ -232,13 +243,16 @@ export default function Karaoke() {
             {busy && <p className="effects-note" role="status">Check your browser for a microphone permission request.</p>}
             {connected && <button className="disconnect" onClick={disconnectMic}>Disconnect microphone</button>}
             <Range label="Microphone volume" max={150} value={settings.mic} onChange={n => update("mic", n)}/>
-            <div className="monitor-row"><div><Headphones size={17}/><span>Hear myself</span><button className="info-dot" aria-label="About microphone monitoring" onClick={() => setNotice("Monitoring plays your mic through your headphones. Keep it off when using speakers to prevent feedback.")}>?</button></div><button role="switch" aria-checked={monitor} aria-label="Hear myself" className={`switch ${monitor ? "enabled" : ""}`} onClick={() => setMonitor(v => !v)}><span/></button></div>
-            <p className="monitor-hint">{connected && !monitor ? "Want to hear your voice? Put on headphones, then turn on Hear myself." : "Keep monitoring off when using speakers to avoid feedback."}</p>
+            <div className="monitor-row"><div><Headphones size={17}/><span>Hear myself</span><button className="info-dot" aria-label="About microphone monitoring" onClick={() => setNotice("Headphone monitoring requests the lowest capture delay and turns off speech processing. Use wired headphones; keep it off with speakers to prevent feedback.")}>?</button></div><button role="switch" disabled={audienceCapture} aria-checked={monitor} aria-label="Hear myself" className={`switch ${monitor ? "enabled" : ""}`} onClick={() => setMonitor(v => !v)}><span/></button></div>
+            <p className="monitor-hint">{connected && !monitor ? "Use wired headphones, then turn on Hear myself for lower-latency monitoring." : "Use wired headphones for monitoring; keep monitoring off with speakers."}</p>
+            <label className="pool-check"><input type="checkbox" checked={fastMonitor} onChange={e => setFastMonitor(e.target.checked)}/>Fast monitoring</label>
+            <p className="effects-note">{fastMonitor ? "Your headphones get your voice directly, without vocal effects or compressor delay. Bluetooth can still add delay; wired headphones work best." : "You hear vocal effects. Enable Fast monitoring for a more immediate voice."}</p>
+            {connected && mic.current && <MicrophoneDelay microphone={mic.current}/>}
             <details className="effects-details">
               <summary><Sparkles size={17}/><span>Vocal effects</span><ChevronDown size={17}/></summary>
               <div><div className="effects-heading"><span>Make it your sound</span><button onClick={() => { update("echo", 0); update("reverb", 0); }} className="text-button">Reset effects</button></div>
               <Range label="Echo" value={settings.echo} onChange={n => update("echo", n)}/><Range label="Reverb" value={settings.reverb} onChange={n => update("reverb", n)}/>
-              <p className="effects-note">Turn on Hear myself to hear your vocal effects.</p></div>
+              <p className="effects-note">Turn on Hear myself and turn off Fast monitoring to hear vocal effects.</p></div>
             </details>
           </section>
 
@@ -257,6 +271,7 @@ export default function Karaoke() {
 
           <section className="discovery-card"><div className="discovery-icon"><Music2 size={23}/></div><h2>What’s your<br/>sing-along mood?</h2><p>Your next anthem is a search away.</p><div className="mood-chips">{["Pop anthems", "90s throwbacks", "Acoustic favorites"].map(mood => <button key={mood} onClick={() => youtubeSearch(mood)}>{mood}<ExternalLink size={12}/></button>)}</div><span>Explore on YouTube, then paste a link here.</span></section>
         </div>
+        <LiveAudience microphone={connected ? mic.current : null} muted={muted} hasSong={Boolean(current)} onCaptureChange={active => { setAudienceCapture(active); if (active) setMonitor(false); }}/>
         <footer><span className="footer-brand">encore.</span><p>A little music goes a long way.</p><span><ShieldCheck size={14}/>Your microphone audio stays on your device.</span></footer>
       </main>
     </div>
@@ -264,7 +279,7 @@ export default function Karaoke() {
     {notice && <div className="toast" role="status"><Check size={18}/><span>{notice}</span></div>}
     <dialog ref={modal} onCancel={() => setDialog(null)} onClick={e => { if (e.target === modal.current) setDialog(null); }} aria-labelledby="dialog-title">
       <div className="dialog-content"><button className="dialog-close icon-btn" aria-label="Close dialog" onClick={() => setDialog(null)}><X size={21}/></button>
-        {dialog === "song" ? <><div className="dialog-icon"><Music2 size={25}/></div><h2 id="dialog-title">Find your next encore.</h2><p>Bring a karaoke track from YouTube to your stage.</p><form onSubmit={addSong}><label htmlFor="video-url">YouTube link or video ID</label><div className="text-input"><Link2 size={18}/><input id="video-url" aria-invalid={Boolean(songError)} aria-describedby={songError ? "song-error" : "link-help"} autoFocus required value={url} onChange={e => { setUrl(e.target.value); setSongError(""); }} placeholder="https://www.youtube.com/watch?v=…" maxLength={2048}/></div><p className="input-hint" id="link-help">Paste a watch, share, Shorts, or live video link.</p><label htmlFor="song-title">Song title <span className="subtle">(optional)</span></label><div className="text-input"><Music2 size={18}/><input id="song-title" value={title} onChange={e => setTitle(e.target.value)} placeholder="Give your track a name" maxLength={150}/></div>{songError && <p className="form-error" id="song-error" role="alert">{songError}</p>}<button className="primary-button" type="submit"><Plus size={18}/>{current ? "Add to queue" : "Add to my stage"}</button></form><div className="dialog-divider"><span>Need a little inspiration?</span></div><form className="search-form" onSubmit={e => { e.preventDefault(); youtubeSearch(); }}><div className="text-input"><Search size={18}/><input aria-label="Find karaoke on YouTube" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search for an artist or song" maxLength={150}/></div><button className="secondary-button" type="submit">YouTube<ExternalLink size={15}/></button></form><small>Search opens YouTube in a new tab. Copy a video link and paste it above. No API key needed.</small></> : <><div className="dialog-icon"><Headphones size={25}/></div><h2 id="dialog-title">Your solo sound check.</h2><p>Three small steps. One great performance.</p><ol className="help-steps"><li><Music2/><div><strong>Pick your song</strong><p>Find a karaoke video on YouTube, copy its link, and use “Add a song”. Press play in the player.</p></div></li><li><Mic/><div><strong>Connect your microphone</strong><p>Allow microphone access when prompted. Choose your built-in or external mic under Input device.</p></div></li><li><Headphones/><div><strong>Put on wired headphones</strong><p>Turn on “Hear myself” to monitor your voice. Add a little echo or reverb to taste. Keep monitoring off with speakers to prevent feedback.</p></div></li></ol><div className="privacy-note"><ShieldCheck size={20}/><p>Microphone audio is processed on your device and is never recorded or uploaded. Your setlist is saved in this browser. YouTube playback connects to Google.</p></div><button className="primary-button" onClick={() => setDialog(null)}>Back to the studio</button></>}
+        {dialog === "song" ? <><div className="dialog-icon"><Music2 size={25}/></div><h2 id="dialog-title">Find your next encore.</h2><p>Bring a karaoke track from YouTube to your stage.</p><form onSubmit={addSong}><label htmlFor="video-url">YouTube link or video ID</label><div className="text-input"><Link2 size={18}/><input id="video-url" aria-invalid={Boolean(songError)} aria-describedby={songError ? "song-error" : "link-help"} autoFocus required value={url} onChange={e => { setUrl(e.target.value); setSongError(""); }} placeholder="https://www.youtube.com/watch?v=…" maxLength={2048}/></div><p className="input-hint" id="link-help">Paste a watch, share, Shorts, or live video link.</p><label htmlFor="song-title">Song title <span className="subtle">(optional)</span></label><div className="text-input"><Music2 size={18}/><input id="song-title" value={title} onChange={e => setTitle(e.target.value)} placeholder="Give your track a name" maxLength={150}/></div>{songError && <p className="form-error" id="song-error" role="alert">{songError}</p>}<button className="primary-button" type="submit"><Plus size={18}/>{current ? "Add to queue" : "Add to my stage"}</button></form><div className="dialog-divider"><span>Need a little inspiration?</span></div><form className="search-form" onSubmit={e => { e.preventDefault(); youtubeSearch(); }}><div className="text-input"><Search size={18}/><input aria-label="Find karaoke on YouTube" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search for an artist or song" maxLength={150}/></div><button className="secondary-button" type="submit">YouTube<ExternalLink size={15}/></button></form><small>Search opens YouTube in a new tab. Copy a video link and paste it above. No API key needed.</small></> : <><div className="dialog-icon"><Headphones size={25}/></div><h2 id="dialog-title">Your solo sound check.</h2><p>Three small steps. One great performance.</p><ol className="help-steps"><li><Music2/><div><strong>Pick your song</strong><p>Find a karaoke video on YouTube, copy its link, and use “Add a song”. Press play in the player.</p></div></li><li><Mic/><div><strong>Connect your microphone</strong><p>Allow microphone access when prompted. Choose your built-in or external mic under Input device.</p></div></li><li><Headphones/><div><strong>Put on wired headphones</strong><p>Turn on “Hear myself” to monitor your voice. Fast monitoring bypasses vocal effects for lower delay. Turn it off to hear echo or reverb. Keep monitoring off with speakers to prevent feedback.</p></div></li></ol><div className="privacy-note"><ShieldCheck size={20}/><p>Microphone audio is processed on your device and is never recorded or uploaded. Live audience output starts only after you share tab audio and enable separate speakers. Your setlist is saved in this browser. YouTube playback connects to Google.</p></div><button className="primary-button" onClick={() => setDialog(null)}>Back to the studio</button></>}
       </div>
     </dialog>
   </div>;

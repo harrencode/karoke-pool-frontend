@@ -82,3 +82,11 @@ python -m pytest -q
 ```
 
 The backend currently supports one worker/replica and ephemeral rooms. Redis and cross-worker broadcasts remain a future scaling step. Configure a TURN relay before relying on Internet voice connections. See the [official YouTube player reference](https://developers.google.com/youtube/iframe_api_reference), [FastAPI WebSockets guide](https://fastapi.tiangolo.com/advanced/websockets/) and [WebRTC negotiation reference](https://developer.mozilla.org/en-US/docs/Web/API/WebRTC_API/Perfect_negotiation) for the underlying integrations.
+
+## Live audience mix (Solo)
+
+Use headphones as the computer's default sound output and connect a separate set of speakers or an audio interface. In Solo, connect/unmute the microphone and add a song. Under **Live audience mix**, choose **Share song tab**, select this Solo studio tab, and enable **Share tab audio**. Then choose **Open audience output**, select the separate speakers, and enable audience sound. Desktop Chrome/Edge with tab-audio capture and output-device selection are required; no backend is involved.
+
+The singer follows the original song and video lyrics. Only the audience's copy of the music is delayed and mixed with the processed microphone. Adjust **Song delay for the audience** between 0 and 2,000 ms: increase it if the voice arrives late; decrease it if the voice arrives early. The 150 ms initial setting is a guess, not automatic calibration. This does not change the lyrics timing or room playback sync.
+
+Monitoring is kept off during sharing, and the audience mix is played only by the separate window. Share the studio tab, never the audience window or entire screen. Default-output aliases and, when reported, the default headphones' physical device are excluded from audience output choices. Stop sharing, disconnect the microphone, remove the current song, close the audience window, or leave Solo to end the mix. Nothing is recorded or uploaded. Real Bluetooth/speaker alignment requires listening and adjustment on the actual devices.

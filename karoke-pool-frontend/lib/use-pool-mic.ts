@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { Microphone } from "./audio";
+import { microphoneConstraints } from "./microphone-constraints";
 
 export function usePoolMic(report: (message: string) => void) {
   const [stream, setStream] = useState<MediaStream | null>(null);
@@ -11,11 +12,12 @@ export function usePoolMic(report: (message: string) => void) {
   const [echo, setEcho] = useState(0);
   const [reverb, setReverb] = useState(0);
   const [monitor, setMonitor] = useState(false);
+  const [fastMonitor, setFastMonitor] = useState(true);
   const graph = useRef<Microphone | null>(null);
   const request = useRef(0);
   const alive = useRef(true);
   const allowed = useRef(false);
-  const volumes = useRef({ gain, echo, reverb, monitor }); volumes.current = { gain, echo, reverb, monitor };
+  const volumes = useRef({ gain, echo, reverb, monitor, fastMonitor }); volumes.current = { gain, echo, reverb, monitor, fastMonitor };
 
   useEffect(() => {
     alive.current = true;
@@ -35,7 +37,7 @@ export function usePoolMic(report: (message: string) => void) {
     const id = ++request.current; setBusy(true);
     let input: MediaStream | null = null, next: Microphone | null = null;
     try {
-      input = await navigator.mediaDevices.getUserMedia({ audio: { deviceId: device ? { exact: device } : undefined, echoCancellation: true, noiseSuppression: true, autoGainControl: false } });
+      input = await navigator.mediaDevices.getUserMedia({ audio: microphoneConstraints(device, volumes.current.monitor) });
       if (!alive.current || request.current !== id) { input.getTracks().forEach(t => t.stop()); return; }
       next = new Microphone(input);
       next.mute(true); // Connect muted; unmuting requires a separate explicit action.
@@ -46,6 +48,7 @@ export function usePoolMic(report: (message: string) => void) {
       next.echo.gain.value = current.echo / 100 * 0.65;
       next.reverb.gain.value = current.reverb / 100 * 0.7;
       next.monitor.gain.value = current.monitor && allowed.current ? 1 : 0;
+      next.setFastMonitoring(current.fastMonitor);
       graph.current?.close(); graph.current = next;
       next.mute(!allowed.current);
       setStream(next.output.stream);
@@ -64,11 +67,19 @@ export function usePoolMic(report: (message: string) => void) {
     if (g) { g.mute(!value); g.monitor.gain.value = value && volumes.current.monitor ? 1 : 0; }
   }
   useEffect(() => {
+    const g = graph.current;
+    if (!g) return;
+    void g.configureMonitoring(monitor).catch(() => {
+      if (graph.current === g) report("This microphone could not change its processing settings. Reconnect it to try again.");
+    });
+  }, [monitor, stream]);
+  useEffect(() => {
     const g = graph.current; if (!g) return;
     g.gain.gain.setTargetAtTime(gain / 100, g.context.currentTime, 0.02);
     g.echo.gain.setTargetAtTime(echo / 100 * 0.65, g.context.currentTime, 0.02);
     g.reverb.gain.setTargetAtTime(reverb / 100 * 0.7, g.context.currentTime, 0.02);
     g.monitor.gain.value = monitor && allowed.current ? 1 : 0;
-  }, [gain, echo, reverb, monitor]);
-  return { stream, busy, devices, device, setDevice, gain, setGain, echo, setEcho, reverb, setReverb, monitor, setMonitor, connect, disconnect, setAllowed };
+    g.setFastMonitoring(fastMonitor);
+  }, [gain, echo, reverb, monitor, fastMonitor]);
+  return { stream, microphone: graph.current, busy, devices, device, setDevice, gain, setGain, echo, setEcho, reverb, setReverb, monitor, setMonitor, fastMonitor, setFastMonitor, connect, disconnect, setAllowed };
 }

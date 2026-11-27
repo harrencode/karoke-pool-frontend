@@ -1,3 +1,7 @@
+import { microphoneConstraints } from "./microphone-constraints";
+import { audioLatency } from "./audio-latency";
+import { monitoringRoute } from "./monitoring-route";
+
 export class Microphone {
   context: AudioContext;
   input: MediaStream;
@@ -7,9 +11,13 @@ export class Microphone {
   echo: GainNode;
   reverb: GainNode;
   analyser: AnalyserNode;
+  private captureUpdate: Promise<void> = Promise.resolve();
+  private closed = false;
+  private fastMonitoring = true;
+  private routeMonitoring: (fast: boolean) => void;
   constructor(input: MediaStream) {
     this.input = input;
-    this.context = new AudioContext({ latencyHint: "interactive" });
+    this.context = new AudioContext({ latencyHint: 0 });
     const c = this.context;
     const source = c.createMediaStreamSource(input);
     this.gain = c.createGain();
@@ -40,13 +48,33 @@ export class Microphone {
     mix.connect(limiter);
     limiter.connect(this.output);
     limiter.connect(this.analyser);
-    limiter.connect(this.monitor).connect(c.destination);
+    this.routeMonitoring = monitoringRoute(c, this.gain, limiter, this.monitor);
+    this.monitor.connect(c.destination);
+  }
+  setFastMonitoring(enabled: boolean) {
+    this.fastMonitoring = enabled;
+    this.routeMonitoring(enabled);
+  }
+  configureMonitoring(enabled: boolean): Promise<void> {
+    // Serialize changes so a slow device cannot restore an older setting.
+    this.captureUpdate = this.captureUpdate.catch(() => {}).then(async () => {
+      if (this.closed) return;
+      await Promise.all(this.input.getAudioTracks().map(track =>
+        track.applyConstraints(microphoneConstraints("", enabled))
+      ));
+    });
+    return this.captureUpdate;
+  }
+  latency() {
+    const settings = this.input.getAudioTracks()[0]?.getSettings() as (MediaTrackSettings & { latency?: number }) | undefined;
+    return audioLatency(settings?.latency, this.context.baseLatency, this.context.outputLatency, this.fastMonitoring);
   }
   mute(value: boolean) {
     this.input.getAudioTracks().forEach(t => { t.enabled = !value; });
     this.output.stream.getAudioTracks().forEach(t => { t.enabled = !value; });
   }
   close() {
+    this.closed = true;
     this.input.getTracks().forEach(t => t.stop());
     this.output.stream.getTracks().forEach(t => t.stop());
     void this.context.close();
